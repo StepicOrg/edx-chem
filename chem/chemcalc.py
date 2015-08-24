@@ -1,5 +1,6 @@
 from __future__ import division
 from fractions import Fraction
+from functools import reduce
 
 from pyparsing import (Literal, StringEnd, OneOrMore, ParseException)
 import nltk
@@ -19,7 +20,7 @@ elements = ['Ac', 'Ag', 'Al', 'Am', 'Ar', 'As', 'At', 'Au', 'B', 'Ba', 'Be',
             'Ru', 'S', 'Sb', 'Sc', 'Se', 'Sg', 'Si', 'Sm', 'Sn', 'Sr', 'Ta',
             'Tb', 'Tc', 'Te', 'Th', 'Ti', 'Tl', 'Tm', 'U', 'Uuo', 'Uup',
             'Uus', 'Uut', 'V', 'W', 'Xe', 'Y', 'Yb', 'Zn', 'Zr']
-digits = map(str, range(10))
+digits = list(map(str, range(10)))
 symbols = list("[](){}^+-/")
 phases = ["(s)", "(l)", "(g)", "(aq)"]
 tokens = reduce(lambda a, b: a ^ b, map(Literal, elements + digits + symbols + phases))
@@ -51,7 +52,7 @@ grammar = """
 
   suffixed -> unsuffixed | unsuffixed suffix
 """
-parser = nltk.ChartParser(nltk.parse_cfg(grammar))
+parser = nltk.ChartParser(nltk.CFG.fromstring(grammar))
 
 
 def _clean_parse_tree(tree):
@@ -75,12 +76,12 @@ def _clean_parse_tree(tree):
         '''1. "if" part handles special case
            2. "else" part is general behaviour '''
 
-        if n[1:][0].node == 'number' and n[1:][0][0][0] == '1':
+        if n[1:][0].label() == 'number' and n[1:][0][0][0] == '1':
             # if suffix is explicitly 1, like ^1-
             # strip 1, leave only sign: ^-
-            return nltk.tree.Tree(n.node, n[2:])
+            return nltk.tree.Tree(n.label(), n[2:])
         else:
-            return nltk.tree.Tree(n.node, n[1:])
+            return nltk.tree.Tree(n.label(), n[1:])
 
     dispatch = {'number': lambda x: nltk.tree.Tree("number", [unparse_number(x)]),
                 'unphased': null_tag,
@@ -88,8 +89,8 @@ def _clean_parse_tree(tree):
                 'number_suffix': lambda x: nltk.tree.Tree('number_suffix', [unparse_number(x[0])]),
                 'suffixed': lambda x: len(x) > 1 and x or x[0],
                 'ion_suffix': ion_suffix,
-                'paren_group_square': lambda x: nltk.tree.Tree(x.node, x[1]),
-                'paren_group_round': lambda x: nltk.tree.Tree(x.node, x[1])}
+                'paren_group_square': lambda x: nltk.tree.Tree(x.label(), x[1]),
+                'paren_group_round': lambda x: nltk.tree.Tree(x.label(), x[1])}
 
     if isinstance(tree, str):
         return tree
@@ -97,16 +98,16 @@ def _clean_parse_tree(tree):
     old_node = None
     ## This loop means that if a node is processed, and returns a child,
     ## the child will be processed.
-    while tree.node in dispatch and tree.node != old_node:
-        old_node = tree.node
-        tree = dispatch[tree.node](tree)
+    while tree.label() in dispatch and tree.label() != old_node:
+        old_node = tree.label()
+        tree = dispatch[tree.label()](tree)
 
     children = []
     for child in tree:
         child = _clean_parse_tree(child)
         children.append(child)
 
-    tree = nltk.tree.Tree(tree.node, children)
+    tree = nltk.tree.Tree(tree.label(), children)
 
     return tree
 
@@ -134,12 +135,12 @@ def _merge_children(tree, tags):
     while not done:
         done = True
         for child in tree:
-            if isinstance(child, nltk.tree.Tree) and child.node == tree.node and tree.node in tags:
+            if isinstance(child, nltk.tree.Tree) and child.label() == tree.label() and tree.label() in tags:
                 merged_children = merged_children + list(child)
                 done = False
             else:
                 merged_children = merged_children + [child]
-        tree = nltk.tree.Tree(tree.node, merged_children)
+        tree = nltk.tree.Tree(tree.label(), merged_children)
         merged_children = []
     #print '======',tree
 
@@ -149,7 +150,7 @@ def _merge_children(tree, tags):
         children.append(_merge_children(child, tags))
 
     #return tree
-    return nltk.tree.Tree(tree.node, children)
+    return nltk.tree.Tree(tree.label(), children)
 
 
 def _render_to_html(tree):
@@ -186,8 +187,8 @@ def _render_to_html(tree):
         return tree
     else:
         children = "".join(map(_render_to_html, tree))
-        if tree.node in dispatch:
-            return dispatch[tree.node](tree, children)
+        if tree.label() in dispatch:
+            return dispatch[tree.label()](tree, children)
         else:
             return children.replace(' ', '')
 
@@ -240,7 +241,7 @@ def _get_final_tree(s):
     Raises pyparsing.ParseException if s is invalid.
     '''
     tokenized = tokenizer.parseString(s)
-    parsed = parser.parse(tokenized)
+    parsed = parser.parse_one(tokenized)
     merged = _merge_children(parsed, {'S', 'group'})
     final = _clean_parse_tree(merged)
     return final
@@ -302,10 +303,10 @@ def divide_chemical_expression(s1, s2, ignore_state=False):
         treedic[i + ' cleaned_mm_list'] = []
         treedic[i + ' factors'] = []
         treedic[i + ' phases'] = []
-        for el in treedic[i].subtrees(filter=lambda t: t.node == 'multimolecule'):
-            count_subtree = [t for t in el.subtrees() if t.node == 'count']
-            group_subtree = [t for t in el.subtrees() if t.node == 'group']
-            phase_subtree = [t for t in el.subtrees() if t.node == 'phase']
+        for el in treedic[i].subtrees(filter=lambda t: t.label() == 'multimolecule'):
+            count_subtree = [t for t in el.subtrees() if t.label() == 'count']
+            group_subtree = [t for t in el.subtrees() if t.label() == 'group']
+            phase_subtree = [t for t in el.subtrees() if t.label() == 'phase']
             if count_subtree:
                 if len(count_subtree[0]) > 1:
                     treedic[i + ' factors'].append(
