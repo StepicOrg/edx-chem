@@ -9,14 +9,14 @@ from .chemcalc import (
     chemical_equations_equal,
 )
 
-import miller
+from . import miller
 
 local_debug = None
 
 
 def log(s, output_type=None):
     if local_debug:
-        print s
+        print(s)
         if output_type == 'html':
             f.write(s + '\n<br>\n')
 
