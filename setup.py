@@ -2,10 +2,10 @@ from setuptools import setup
 
 setup(
     name="chem",
-    version="0.1.1",
+    version="0.1.2",
     packages=["chem"],
     install_requires=[
-        "pyparsing==2.0.1",
+        "pyparsing",
         "numpy",
         "scipy",
         "nltk",
